@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <OtherFlags Condition="'$(JENGA_ROOT_PATH)' == ''">--sig:ModuleSignatures.generated</OtherFlags>
+    <OtherFlags Condition="'$(JENGA_ROOT_PATH)' != ''">--sig:ModuleSignatures.jenga.generated</OtherFlags>
+    <OtherFlags>--warnaserror+ --warnon:1182,3218 $(OtherFlags)</OtherFlags>
+    <EmbedAllSources>true</EmbedAllSources>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Assert.fsi" />
+    <Compile Include="Assert.fs" />
+    <Compile Include="Bin_prot_reader.fsi" />
+    <Compile Include="Bin_prot_reader.fs" />
+    <Compile Include="Memory_stream_with_close_buffer.fsi" />
+    <Compile Include="Memory_stream_with_close_buffer.fs" />
+    <Compile Include="Fake_network_stream.fsi" />
+    <Compile Include="Fake_network_stream.fs" />
+    <Compile Include="Test_connection.fsi" />
+    <Compile Include="Test_connection.fs" />
+    <Compile Include="Pipe_response.fsi" />
+    <Compile Include="Pipe_response.fs" />
+    <Compile Include="Transport_test.fs" />
+    <Compile Include="Connection_test.fs" />
+    <Compile Include="Rpc_test.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\bin_prot\src\Bin_prot.fsproj" />
+    <ProjectReference Include="..\..\generated_types\bin_prot_generated_types\Bin_prot_generated_types.fsproj" />
+    <ProjectReference Include="..\src\Async_rpc.fsproj" />
+    <ProjectReference Include="..\..\core_kernel\src\Core_kernel.fsproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="nunit" Version="3.13.2" />
+    <PackageReference Include="NUnit3TestAdapter" Version="4.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.0.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <OtherFlags Condition="'$(JENGA_ROOT_PATH)' == ''">--sig:ModuleSignatures.generated</OtherFlags>
+    <OtherFlags Condition="'$(JENGA_ROOT_PATH)' != ''">--sig:ModuleSignatures.jenga.generated</OtherFlags>
+    <OtherFlags>--warnaserror+ --warnon:1182,3218 $(OtherFlags)</OtherFlags>
+    <EmbedAllSources>true</EmbedAllSources>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Protocol.fs" />
+    <Compile Include="Transport.fsi" />
+    <Compile Include="Transport.fs" />
+    <Compile Include="Known_protocol.fsi" />
+    <Compile Include="Known_protocol.fs" />
+    <Compile Include="Protocol_version_header.fsi" />
+    <Compile Include="Protocol_version_header.fs" />
+    <Compile Include="Writer_with_length.fsi" />
+    <Compile Include="Writer_with_length.fs" />
+    <Compile Include="Connection.fsi" />
+    <Compile Include="Connection.fs" />
+    <Compile Include="Bin_prot_reader.fsi" />
+    <Compile Include="Bin_prot_reader.fs" />
+    <Compile Include="Rpc.fsi" />
+    <Compile Include="Rpc.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\bin_prot\src\Bin_prot.fsproj" />
+    <ProjectReference Include="..\generated\Async_rpc.Bin_prot_generated_types.fsproj" />
+    <ProjectReference Include="..\..\core_kernel\src\Core_kernel.fsproj" />
+  </ItemGroup>
+</Project>
