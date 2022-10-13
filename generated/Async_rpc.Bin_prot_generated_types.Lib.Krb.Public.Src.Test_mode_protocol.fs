@@ -8,8 +8,8 @@ module Ack = struct
     Core_kernel.Bin_prot_generated_types.Lib.Dotnet.Core_with_dotnet.Src.Or_error.T.bin_size_t
       bin_size_unit v
   let bin_write_t buf pos v =
-    (Core_kernel.Bin_prot_generated_types.Lib.Dotnet.Core_with_dotnet.Src.Or_error.T.bin_write_t
-       bin_write_unit) buf pos v
+    Core_kernel.Bin_prot_generated_types.Lib.Dotnet.Core_with_dotnet.Src.Or_error.T.bin_write_t
+      bin_write_unit buf pos v
   let bin_writer_t =
     {
       Bin_prot.Type_class.size = bin_size_t;

@@ -25,10 +25,11 @@
     <Compile Include="Transport_test.fs" />
     <Compile Include="Connection_test.fs" />
     <Compile Include="Rpc_test.fs" />
+    <Compile Include="Server_test.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\bin_prot\src\Bin_prot.fsproj" />
-    <ProjectReference Include="..\..\generated_types\bin_prot_generated_types\Bin_prot_generated_types.fsproj" />
+    <ProjectReference Include="..\generated\Async_rpc.Bin_prot_generated_types.fsproj" />
     <ProjectReference Include="..\src\Async_rpc.fsproj" />
     <ProjectReference Include="..\..\core_kernel\src\Core_kernel.fsproj" />
   </ItemGroup>

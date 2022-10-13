@@ -43,7 +43,8 @@ let ``Can send RPCs and pass responses to handler`` () =
 
   let rpc =
     Rpc.create
-      {| name = "test-rpc"; version = 1 |}
+      { Rpc_description.name = "test-rpc"
+        Rpc_description.version = 1 }
       Bin_prot.Type_class.bin_string
       Bin_prot.Type_class.bin_string
 
@@ -86,8 +87,8 @@ let bin_error = Bin_prot.Type_class.bin_unit
 
 let pipe_rpc =
   Pipe_rpc.create
-    {| name = "test-pipe-rpc"
-       version = 1 |}
+    { Rpc_description.name = "test-pipe-rpc"
+      Rpc_description.version = 1 }
     Bin_prot.Type_class.bin_string
     Bin_prot.Type_class.bin_string
     bin_error

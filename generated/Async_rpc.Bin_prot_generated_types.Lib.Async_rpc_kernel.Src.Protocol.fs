@@ -220,8 +220,8 @@ module Rpc_result = struct
     Core_kernel.Bin_prot_generated_types.Result.bin_size_t _size_of_a
       Rpc_error.T.bin_size_t v
   let bin_write_t _write_a buf pos v =
-    (Core_kernel.Bin_prot_generated_types.Result.bin_write_t _write_a
-       Rpc_error.T.bin_write_t) buf pos v
+    Core_kernel.Bin_prot_generated_types.Result.bin_write_t _write_a
+      Rpc_error.T.bin_write_t buf pos v
   let bin_writer_t bin_writer_a =
     {
       Bin_prot.Type_class.size =
@@ -338,7 +338,7 @@ module Response = struct
     function
     | { id = v1; data = v2 } ->
         let pos = Query_id.bin_write_t buf pos v1 in
-        (Rpc_result.bin_write_t _write_a) buf pos v2
+        Rpc_result.bin_write_t _write_a buf pos v2
   let bin_writer_needs_length bin_writer_a =
     {
       Bin_prot.Type_class.size =
@@ -447,7 +447,7 @@ module Stream_query = struct
   let bin_size_needs_length _size_of_a v =
     Needs_length_generated_0.bin_size_t _size_of_a v
   let bin_write_needs_length _write_a buf pos v =
-    (Needs_length_generated_0.bin_write_t _write_a) buf pos v
+    Needs_length_generated_0.bin_write_t _write_a buf pos v
   let bin_writer_needs_length bin_writer_a =
     {
       Bin_prot.Type_class.size =
@@ -502,8 +502,8 @@ module Stream_initial_message = struct
     function
     | { unused_query_id = v1; initial = v2 } ->
         let pos = Unused_query_id.bin_write_t buf pos v1 in
-        (Core_kernel.Bin_prot_generated_types.Result.bin_write_t
-           _write_response _write_error) buf pos v2
+        Core_kernel.Bin_prot_generated_types.Result.bin_write_t _write_response
+          _write_error buf pos v2
   let bin_writer_t bin_writer_response bin_writer_error =
     {
       Bin_prot.Type_class.size =
@@ -620,7 +620,7 @@ module Stream_response_data = struct
   let bin_size_needs_length _size_of_a v =
     Needs_length_generated_0.bin_size_t _size_of_a v
   let bin_write_needs_length _write_a buf pos v =
-    (Needs_length_generated_0.bin_write_t _write_a) buf pos v
+    Needs_length_generated_0.bin_write_t _write_a buf pos v
   let bin_writer_needs_length bin_writer_a =
     {
       Bin_prot.Type_class.size =
@@ -678,10 +678,10 @@ module Message = struct
     | Heartbeat -> Bin_prot.Write.bin_write_int_8bit buf pos 0
     | Query v1 ->
         let pos = Bin_prot.Write.bin_write_int_8bit buf pos 1 in
-        (Query.bin_write_needs_length _write_a) buf pos v1
+        Query.bin_write_needs_length _write_a buf pos v1
     | Response v1 ->
         let pos = Bin_prot.Write.bin_write_int_8bit buf pos 2 in
-        (Response.bin_write_needs_length _write_a) buf pos v1
+        Response.bin_write_needs_length _write_a buf pos v1
   let bin_writer_needs_length bin_writer_a =
     {
       Bin_prot.Type_class.size =

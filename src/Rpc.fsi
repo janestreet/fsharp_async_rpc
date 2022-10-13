@@ -7,7 +7,7 @@ module Rpc =
   type ('query, 'response) t
 
   val create :
-    {| name : string; version : int |} ->
+    Rpc_description.t ->
     bin_query : 'query Bin_prot.Type_class.t ->
     bin_response : 'response Bin_prot.Type_class.t ->
     t<'query, 'response>
@@ -19,6 +19,11 @@ module Rpc =
     (Result<'response, Rpc_error.t> -> unit) ->
     unit Or_error.t
 
+  val description : t<_, _> -> Rpc_description.t
+
+  val bin_query : t<'query, _> -> 'query Bin_prot.Type_class.t
+  val bin_response : t<_, 'response> -> 'response Bin_prot.Type_class.t
+
 module Pipe_message =
   type 'a t =
     | Update of 'a
@@ -29,7 +34,7 @@ module Pipe_rpc =
   type ('query, 'response, 'error) t
 
   val create :
-    {| name : string; version : int |} ->
+    Rpc_description.t ->
     bin_query : 'query Bin_prot.Type_class.t ->
     bin_response : 'response Bin_prot.Type_class.t ->
     bin_error : 'error Bin_prot.Type_class.t ->

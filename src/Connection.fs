@@ -7,12 +7,20 @@ open Async_rpc.Bin_prot_generated_types
 open Core_kernel.Bin_prot_generated_types
 open System.Threading.Tasks
 
+module Concurrency =
+  type t =
+    | Parallel
+    | Sequential
+
 type t' =
   { mutable last_seen_alive : System.DateTime
     mutable open_state : Transport.Open_state.t
+    close_finished : TaskCompletionSource<unit>
     writer : Transport.Writer.t
     open_queries : Dictionary<Query.Id.t, Response_handler.t>
-    time_source : Time_source.t }
+    time_source : Time_source.t
+    implementations : Map<Rpc_description.t, Implementation.With_connection_state.t>
+    server_concurrency : Concurrency.t }
 
 type t = T of t' Sequencer.t
 
@@ -171,22 +179,51 @@ let handle_response (T t) (response : _ Response.t) read_buffer read_buffer_pos_
               // all, so it should be fine to stop the reader loop here.
               Transport.Handler_result.Stop e)))
 
-let handle_msg t msg read_buffer read_buffer_pos_ref : _ Transport.Handler_result.t =
+let handle_msg (T t) msg read_buffer read_buffer_pos_ref : _ Transport.Handler_result.t =
   match msg with
   | Message.t.Heartbeat -> Transport.Handler_result.Continue
   | Message.t.Response response ->
-    handle_response t response read_buffer read_buffer_pos_ref
+    handle_response (T t) response read_buffer read_buffer_pos_ref
+
   | Message.t.Query query ->
     // In OCaml this raises because there are no implementations and the default
     // behaviour is to throw an exception that gets consumed by an error stream
     // iter that cleans everything up. Here we bubble the error up the call stack
     // so it's handled explicitly.
-    Transport.Handler_result.Stop(
-      Rpc_error.t.Unimplemented_rpc(
-        query.tag,
-        Rpc_error.Unimplemented_rpc.t.Version query.id
-      )
-    )
+    let description =
+      { Rpc_description.name = query.tag
+        Rpc_description.version = int query.version }
+
+    Sequencer.with_
+      t
+      (fun t ->
+        match Map.tryFind description t.implementations with
+        | None ->
+          Transport.Handler_result.Stop(
+            Rpc_error.t.Unimplemented_rpc(
+              query.tag,
+              Rpc_error.Unimplemented_rpc.t.Version query.id
+            )
+          )
+        | Some implementation ->
+          let result =
+            Implementation.With_connection_state.run
+              implementation
+              query
+              read_buffer
+              read_buffer_pos_ref
+              t.writer
+
+          match result with
+          | Ok async_result ->
+            match t.server_concurrency with
+            | Concurrency.Sequential -> Async.RunSynchronously async_result
+            | Concurrency.Parallel -> Async.Start async_result
+
+            Transport.Handler_result.Continue
+          | Error error -> Transport.Handler_result.Stop error)
+
+
 
 let on_message t message =
   let buf = new Bin_prot.Buffer.Buffer<byte>(message : byte [])
@@ -207,6 +244,9 @@ let cleanup t reason =
 
 let close (T t) =
   Sequencer.with_ t (fun t -> cleanup t (Transport.Close_reason.By_user))
+
+let close_finished (T t) =
+  Sequencer.with_ t (fun t -> t.close_finished.Task)
 
 let open_state (T t) = Sequencer.with_ t (fun t -> t.open_state)
 
@@ -277,22 +317,40 @@ let run_after_handshake (T t) reader =
 
   let reason = Transport.Close_reason.errorf "Connection reader loop finished: %A" result
 
-  Sequencer.with_
-    t
-    (fun t ->
-      cleanup t reason
-      // In OCaml, this is part of the cleanup function. Here it's after the reader loop finishes,
-      // so that handlers are always called in the reader thread.
-      close_outstanding_queries t.open_queries)
+  let close_finished =
+    Sequencer.with_
+      t
+      (fun t ->
+        cleanup t reason
+        // In OCaml, this is part of the cleanup function. Here it's after the reader loop finishes,
+        // so that handlers are always called in the reader thread.
+        close_outstanding_queries t.open_queries
+        t.close_finished)
 
+  // We [SetResult] outside of the sequencer since it's possible that the concurrency
+  // setting is sequential, in which case we don't want to be holding the lock when
+  // executing whatever is binding on [close_finished]
+  close_finished.SetResult()
 
-let create
+let create_with_implementations
   stream
   (time_source : Time_source.t)
   protocol
   (args : {| max_message_size : int |})
   f
+  implementations_list
+  server_concurrency
   =
+  let close_finished = new TaskCompletionSource<_>()
+
+  let implementations =
+    List.map
+      (fun implementation ->
+        Implementation.With_connection_state.rpc_description implementation,
+        implementation)
+      implementations_list
+    |> Map.ofList
+
   let create_and_handshake () =
     Result.let_syntax {
       let! transport = Transport.create stream args
@@ -302,7 +360,10 @@ let create
           open_state = Transport.Open_state.Open
           last_seen_alive = time_source.now ()
           open_queries = Dictionary()
-          time_source = time_source }
+          time_source = time_source
+          implementations = implementations
+          server_concurrency = server_concurrency
+          close_finished = close_finished }
         |> Sequencer.create
 
       Transport.Writer.set_close_finished_callback
@@ -332,6 +393,9 @@ let create
         f (Ok t)
         heartbeat_periodically t
       | Error error -> f (Error error))
+
+let create stream time_source protocol args f =
+  create_with_implementations stream time_source protocol args f [] Concurrency.Sequential
 
 module For_testing =
   let create_wait_for_connection

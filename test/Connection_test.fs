@@ -182,7 +182,9 @@ let ``Connection dies if no data after fixed timeout period`` () =
   )
 
 [<Test>]
-let ``Connection can handshake, send queries, and handle hard-coded responses`` () =
+let ``Connection can handshake, send queries, handle hard-coded responses, and close``
+  ()
+  =
   let test_connection, connection = Test_connection.create_with_fixed_time_source ()
 
   let response_text = "lorem ipsum"
@@ -231,6 +233,9 @@ let ``Connection can handshake, send queries, and handle hard-coded responses`` 
   wait_for_responses responses_to_send
 
   spin_until (fun () -> Connection.For_testing.open_queries connection = [])
+
+  Connection.close connection
+  (Connection.close_finished connection).Result
 
 let dispatch_and_get_task connection handler_return =
   let response = TaskCompletionSource<_>()

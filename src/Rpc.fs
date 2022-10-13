@@ -5,14 +5,16 @@ open Async_rpc.Protocol
 
 module Rpc =
   type ('query, 'response) t =
-    { tag : Rpc_tag.t
-      version : int
+    { description : Rpc_description.t
       bin_query : 'query Bin_prot.Type_class.t
       bin_response : 'response Bin_prot.Type_class.t }
 
-  let create (args : {| name : string; version : int |}) bin_query bin_response =
-    { tag = args.name
-      version = args.version
+  let description t = t.description
+  let bin_query t = t.bin_query
+  let bin_response t = t.bin_response
+
+  let create description bin_query bin_response =
+    { description = description
       bin_query = bin_query
       bin_response = bin_response }
 
@@ -41,8 +43,8 @@ module Rpc =
     let query_id = Query.Id.create () in
 
     let query : _ Query.t =
-      { tag = t.tag
-        version = int64 t.version
+      { tag = t.description.name
+        version = int64 t.description.version
         id = query_id
         data = query } in
 
@@ -56,22 +58,20 @@ module Pipe_message =
 
 module Streaming_rpc =
   type ('query, 'initial_response, 'update_response, 'error_response) t =
-    { tag : Rpc_tag.t
-      version : int
+    { description : Rpc_description.t
       bin_query : 'query Bin_prot.Type_class.t
       bin_initial_response : 'initial_response Bin_prot.Type_class.t
       bin_update_response : 'update_response Bin_prot.Type_class.t
       bin_error_response : 'error_response Bin_prot.Type_class.t }
 
   let create
-    (args : {| name : string; version : int |})
+    description
     bin_query
     bin_initial_response
     bin_update_response
     bin_error_response
     =
-    { tag = args.name
-      version = args.version
+    { description = description
       bin_query = bin_query
       bin_initial_response = bin_initial_response
       bin_update_response = bin_update_response
@@ -79,8 +79,8 @@ module Streaming_rpc =
 
   let abort t conn id =
     let query : _ Query.t =
-      { tag = t.tag
-        version = int64 t.version
+      { tag = t.description.name
+        version = int64 t.description.version
         id = id
         data = Stream_query.t.Abort } in
 
@@ -208,8 +208,8 @@ module Streaming_rpc =
     let query_id = Query.Id.create () in
 
     let query : _ Query.t =
-      { tag = t.tag
-        version = int64 t.version
+      { tag = t.description.name
+        version = int64 t.description.version
         id = query_id
         data = query }
 
@@ -229,9 +229,9 @@ module Pipe_rpc =
   type ('query, 'response, 'error) t =
     | T of Streaming_rpc.t<'query, unit, 'response, 'error>
 
-  let create args bin_query bin_response bin_error =
+  let create description bin_query bin_response bin_error =
     Streaming_rpc.create
-      args
+      description
       bin_query
       Bin_prot.Type_class.bin_unit
       bin_response

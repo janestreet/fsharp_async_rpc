@@ -19,12 +19,19 @@
     <Compile Include="Protocol_version_header.fs" />
     <Compile Include="Writer_with_length.fsi" />
     <Compile Include="Writer_with_length.fs" />
-    <Compile Include="Connection.fsi" />
-    <Compile Include="Connection.fs" />
     <Compile Include="Bin_prot_reader.fsi" />
     <Compile Include="Bin_prot_reader.fs" />
+    <Compile Include="Rpc_description.fsi" />
+    <Compile Include="Rpc_description.fs" />
+    <Compile Include="Implementation.fsi"/>
+    <Compile Include="Implementation.fs"/>
+    <Compile Include="Connection.fsi" />
+    <Compile Include="Connection.fs" />
     <Compile Include="Rpc.fsi" />
     <Compile Include="Rpc.fs" />
+    <Compile Include="Server.fsi" />
+    <Compile Include="Server.fs"/>
+
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\bin_prot\src\Bin_prot.fsproj" />
