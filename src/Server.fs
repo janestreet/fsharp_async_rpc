@@ -17,6 +17,7 @@ let port t = t.port
 let wait_for_connection t create_connection =
   async {
     while true do
+      // [create_connection] takes ownership of [tcp_client] and handles closing
       let! tcp_client =
         t.tcp_listener.AcceptTcpClientAsync()
         |> Async.AwaitTask

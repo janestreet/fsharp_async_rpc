@@ -29,6 +29,8 @@
     <Compile Include="Connection.fs" />
     <Compile Include="Rpc.fsi" />
     <Compile Include="Rpc.fs" />
+    <Compile Include="Versioned_rpc.fsi" />
+    <Compile Include="Versioned_rpc.fs" />
     <Compile Include="Server.fsi" />
     <Compile Include="Server.fs"/>
 

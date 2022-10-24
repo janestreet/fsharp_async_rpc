@@ -2,6 +2,7 @@ namespace Async_rpc
 
 open Core_kernel
 open Async_rpc.Protocol
+open System.Threading.Tasks
 
 module Rpc =
   type ('query, 'response) t =
@@ -40,15 +41,28 @@ module Rpc =
 
       Response_handler.Result.Remove(Ok())
 
-    let query_id = Query.Id.create () in
+    let query_id = Query.Id.create ()
 
     let query : _ Query.t =
       { tag = t.description.name
         version = int64 t.description.version
         id = query_id
-        data = query } in
+        data = query }
 
     Connection.dispatch conn (Some response_handler) t.bin_query.writer query
+
+  let dispatch_async t connection query =
+    let response_received = new TaskCompletionSource<_>()
+
+    let callback =
+      Result.mapError Rpc_error.to_error
+      >> response_received.SetResult
+
+    task {
+      match dispatch t connection query callback with
+      | Ok () -> return! response_received.Task
+      | Error error -> return (Error error)
+    }
 
 module Pipe_message =
   type 'a t =
