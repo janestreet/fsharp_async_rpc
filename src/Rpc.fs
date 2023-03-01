@@ -41,9 +41,9 @@ module Rpc =
 
       Response_handler.Result.Remove(Ok())
 
-    let query_id = Query.Id.create ()
+    let query_id = Query_id.create ()
 
-    let query : _ Query.t =
+    let query : _ Query_v1.t =
       { tag = t.description.name
         version = int64 t.description.version
         id = query_id
@@ -92,7 +92,7 @@ module Streaming_rpc =
       bin_error_response = bin_error_response }
 
   let abort t conn id =
-    let query : _ Query.t =
+    let query : _ Query_v1.t =
       { tag = t.description.name
         version = int64 t.description.version
         id = id
@@ -109,7 +109,7 @@ module Streaming_rpc =
 
       type ('query, 'initial, 'update, 'error) t =
         { rpc : rpc<'query, 'initial, 'update, 'error>
-          query_id : Query.Id.t
+          query_id : Query_id.t
           make_update_handler : 'initial -> 'update Update_handler.t
           initial_result_handler : Result<Result<'initial, 'error>, Rpc_error.t> -> unit
           connection : Connection.t }
@@ -144,8 +144,7 @@ module Streaming_rpc =
           let data =
             Bin_prot_reader.read_and_verify_length
               Stream_response_data.bin_reader_nat0_t
-              (Some
-                (function
+              (Some (function
                 | Stream_response_data.t.Eof -> 0
                 | Stream_response_data.t.Ok len -> len))
               read_buffer
@@ -219,9 +218,9 @@ module Streaming_rpc =
       Stream_query.bin_writer_needs_length (Writer_with_length.of_type_class t.bin_query)
 
     let query = Stream_query.t.Query query in
-    let query_id = Query.Id.create () in
+    let query_id = Query_id.create () in
 
-    let query : _ Query.t =
+    let query : _ Query_v1.t =
       { tag = t.description.name
         version = int64 t.description.version
         id = query_id

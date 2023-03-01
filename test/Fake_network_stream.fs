@@ -8,13 +8,11 @@ let not_supported () = raise (System.NotSupportedException())
 let async_choose f1 f2 =
   let result = System.Threading.Tasks.TaskCompletionSource<_>()
 
-  Thread.spawn_and_ignore
-    "async_choose thread 1"
-    (fun () -> ignore (f1 () |> result.TrySetResult : bool))
+  Thread.spawn_and_ignore "async_choose thread 1" (fun () ->
+    ignore (f1 () |> result.TrySetResult : bool))
 
-  Thread.spawn_and_ignore
-    "async_choose thread 2"
-    (fun () -> ignore (f2 () |> result.TrySetResult : bool))
+  Thread.spawn_and_ignore "async_choose thread 2" (fun () ->
+    ignore (f2 () |> result.TrySetResult : bool))
 
   result.Task.Result
 
@@ -41,30 +39,28 @@ type t
   let read buffer pos length =
     // This lock is to prevent races between both reader / writer sides simultaneously
     // operating on the same 'direction' of the connection.
-    Sequencer.with_
-      reader_end
-      (fun reader_end ->
-        let rec spin_read_until_nonzero () =
-          if closed then
-            0
+    Sequencer.with_ reader_end (fun reader_end ->
+      let rec spin_read_until_nonzero () =
+        if closed then
+          0
+        else
+          let num_read =
+            reader_end.Position <- reader_pos
+
+            let num_read = reader_end.Read(buffer, pos, length)
+
+            reader_pos <- reader_end.Position
+            num_read
+
+          if num_read = 0 then
+            while not (System.Threading.Monitor.Wait reader_end) do
+              ()
+
+            spin_read_until_nonzero ()
           else
-            let num_read =
-              reader_end.Position <- reader_pos
+            num_read
 
-              let num_read = reader_end.Read(buffer, pos, length)
-
-              reader_pos <- reader_end.Position
-              num_read
-
-            if num_read = 0 then
-              while not (System.Threading.Monitor.Wait reader_end) do
-                ()
-
-              spin_read_until_nonzero ()
-            else
-              num_read
-
-        spin_read_until_nonzero ())
+      spin_read_until_nonzero ())
 
   member this.is_closed() = closed
 
@@ -92,13 +88,11 @@ type t
   override this.Write(buffer, pos, length) =
     Option.iter raise exception_on_write
 
-    Sequencer.with_
-      writer_end
-      (fun writer_end ->
-        writer_end.Position <- writer_pos
-        writer_end.Write(buffer, pos, length)
-        writer_pos <- writer_end.Position
-        System.Threading.Monitor.Pulse writer_end)
+    Sequencer.with_ writer_end (fun writer_end ->
+      writer_end.Position <- writer_pos
+      writer_end.Write(buffer, pos, length)
+      writer_pos <- writer_end.Position
+      System.Threading.Monitor.Pulse writer_end)
 
   override this.ReadTimeout
     with get () = read_timeout_ms
@@ -122,13 +116,10 @@ type t
 
   override this.Close() =
     [ reader_end; writer_end ]
-    |> List.iter
-         (fun end_ ->
-           Sequencer.with_
-             end_
-             (fun end_ ->
-               end_.Close()
-               System.Threading.Monitor.Pulse end_))
+    |> List.iter (fun end_ ->
+      Sequencer.with_ end_ (fun end_ ->
+        end_.Close()
+        System.Threading.Monitor.Pulse end_))
 
     closed <- true
 

@@ -42,12 +42,13 @@ let create
     protocol_header
 
   let connection =
-    Connection.For_testing.create_wait_for_connection
+    Connection.create_async
       connection_stream
       time_sources.for_connection
       protocol
       {| max_message_size = Transport.default_max_message_size |}
-    |> Result.ok_exn
+
+  let connection = connection.Result |> Result.ok_exn
 
   expect_message_from_reader
     test_transport.reader

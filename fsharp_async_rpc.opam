@@ -13,6 +13,7 @@ depends: [
   "ocaml" {>= "4.08.0"}
   "dune" {>= "2.0.0"}
 ]
+available: arch != "arm32" & arch != "x86_32"
 synopsis: "Reimplementation of our async_rpc library in F#"
 description: "
 This library reimplements async_rpc and is used for building RPC-style protocols which can communicate with OCaml RPC servers.

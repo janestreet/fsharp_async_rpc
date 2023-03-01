@@ -149,12 +149,11 @@ module Reader =
       else
         read_so_far
 
-    try_read
-      (fun () ->
-        if len > 0 && fill_buffer_and_get_length 0 < len then
-          Error Error.End_of_stream
-        else
-          Ok())
+    try_read (fun () ->
+      if len > 0 && fill_buffer_and_get_length 0 < len then
+        Error Error.End_of_stream
+      else
+        Ok())
 
   let rec read_forever t on_message on_end_of_batch =
     let result =
@@ -194,10 +193,10 @@ module Reader =
 
         let x = bin_reader.read array pos_ref
 
-        if !pos_ref <> buf.Length then
+        if pos_ref.Value <> buf.Length then
           sprintf
             "message length (%d) did not match expected length (%d)"
-            (!pos_ref)
+            (pos_ref.Value)
             buf.Length
           |> Error.other
           |> Error
@@ -216,11 +215,11 @@ module Reader =
           let pos_ref = ref 0
           List.iter (fun f -> f array pos_ref) consumers
 
-          if buf.Length <> !pos_ref then
+          if buf.Length <> pos_ref.Value then
             failwithf
               "Buffer (length %d) was not fully consumed (consumed %d)"
               buf.Length
-              !pos_ref
+              pos_ref.Value
 
           Handler_result.Stop())
         ignore
@@ -241,18 +240,16 @@ module Writer =
   type t = T of t' Sequencer.t
 
   let close_and_get_reason (T t) reason =
-    Sequencer.with_
-      t
-      (fun t ->
-        match t.open_state with
-        | Open_state.Close_started reason -> reason
-        | Open_state.Open ->
-          t.open_state <- Open_state.Close_started reason
+    Sequencer.with_ t (fun t ->
+      match t.open_state with
+      | Open_state.Close_started reason -> reason
+      | Open_state.Open ->
+        t.open_state <- Open_state.Close_started reason
 
-          // In case the close is not from the background thread, we need to signal
-          // that thread to stop looping, else it may wait forever for a message.
-          Blocking_queue.Writer.write t.to_send.t (Message.Close reason)
-          reason)
+        // In case the close is not from the background thread, we need to signal
+        // that thread to stop looping, else it may wait forever for a message.
+        Blocking_queue.Writer.write t.to_send.t (Message.Close reason)
+        reason)
 
   let close t =
     ignore (close_and_get_reason t Close_reason.By_user : Close_reason.t)
@@ -315,33 +312,31 @@ module Writer =
     }
 
   let send_bin_prot (T t) (bin_writer : 'a Bin_prot.Type_class.writer) (x : 'a) =
-    Sequencer.with_
-      t
-      (fun t ->
-        match t.open_state with
-        | Open_state.Close_started close_reason -> Send_result.Close_started close_reason
-        | Open_state.Open ->
-          let payload_len = bin_writer.size x in
+    Sequencer.with_ t (fun t ->
+      match t.open_state with
+      | Open_state.Close_started close_reason -> Send_result.Close_started close_reason
+      | Open_state.Open ->
+        let payload_len = bin_writer.size x in
 
-          if With_limit.message_size_ok t.to_send (int64 payload_len) then
+        if With_limit.message_size_ok t.to_send (int64 payload_len) then
 
-            let buffer = new Bin_prot.Buffer.Buffer<byte>(payload_len)
-            let pos = bin_writer.write buffer 0 x
+          let buffer = new Bin_prot.Buffer.Buffer<byte>(payload_len)
+          let pos = bin_writer.write buffer 0 x
 
-            if pos <> payload_len then
-              Send_result.Other_error(
-                Error.Of.format
-                  "Bug: Length of data written to payload (%d) differs from sizer output (%d)"
-                  pos
-                  payload_len
-              )
-            else
-              Blocking_queue.Writer.write t.to_send.t (Message.Message buffer.Buffer)
-              Send_result.Sent()
+          if pos <> payload_len then
+            Send_result.Other_error(
+              Error.Of.format
+                "Bug: Length of data written to payload (%d) differs from sizer output (%d)"
+                pos
+                payload_len
+            )
           else
-            Send_result.Message_too_big
-              { size = payload_len
-                max_message_size = t.to_send.max_message_size })
+            Blocking_queue.Writer.write t.to_send.t (Message.Message buffer.Buffer)
+            Send_result.Sent()
+        else
+          Send_result.Message_too_big
+            { size = payload_len
+              max_message_size = t.to_send.max_message_size })
 
   let send_bin_prot_exn t bin_writer value =
     send_bin_prot t bin_writer value
@@ -358,13 +353,11 @@ module Writer =
     let wait_for_flushed (T t) =
       let signal = new TaskCompletionSource<unit>()
 
-      Sequencer.with_
-        t
-        (fun t ->
-          match t.open_state with
-          | Open_state.Open ->
-            Blocking_queue.Writer.write t.to_send.t (Message.Flush signal)
-          | Open_state.Close_started (_ : Close_reason.t) -> signal.SetResult())
+      Sequencer.with_ t (fun t ->
+        match t.open_state with
+        | Open_state.Open ->
+          Blocking_queue.Writer.write t.to_send.t (Message.Flush signal)
+        | Open_state.Close_started (_ : Close_reason.t) -> signal.SetResult())
 
       signal.Task.Result
 

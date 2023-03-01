@@ -2,9 +2,9 @@ module Async_rpc.Bin_prot_generated_types.Lib.Async_rpc_kernel.Src.Versioned_rpc
 open Bin_prot.Write
 open Bin_prot.Read
 open Bin_prot.Size
-module Menu = struct
-  module V1 = struct
-    module T = struct
+module Menu =
+  module V1 =
+    module T =
       type query = unit
       let bin_size_query = bin_size_unit
       let bin_write_query = bin_write_unit
@@ -68,6 +68,3 @@ module Menu = struct
           Bin_prot.Type_class.writer = bin_writer_response;
           Bin_prot.Type_class.reader = bin_reader_response
         }
-    end
-  end
-end

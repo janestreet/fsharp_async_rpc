@@ -19,9 +19,9 @@ let parse_query_message reader bin_read_payload bin_size_payload =
       (fun buf pos_ref -> payload := Some(bin_read_payload buf pos_ref)) ]
 
   match !query, !payload with
-  | Some (Message.t.Query q), Some payload ->
+  | Some (Message.t.Query_v1 q), Some payload ->
     Assert.AreEqual(q.data, bin_size_payload payload)
-    Query.map_data q (fun (_ : int) -> payload)
+    Query_v1.map_data q (fun (_ : int) -> payload)
   | (Some (_ : Bin_prot.Nat0.t Message.t)
     | None),
     (Some (_ : 'a)
@@ -44,7 +44,7 @@ let ``Can send RPCs and pass responses to handler`` () =
   let rpc =
     Rpc.create
       { Rpc_description.name = "test-rpc"
-        Rpc_description.version = 1 }
+        Rpc_description.version = 1L }
       Bin_prot.Type_class.bin_string
       Bin_prot.Type_class.bin_string
 
@@ -54,13 +54,9 @@ let ``Can send RPCs and pass responses to handler`` () =
   let pending_received_responses = new CountdownEvent(num_dispatches)
 
   let dispatch_and_expect i =
-    Rpc.dispatch
-      rpc
-      connection
-      (query_data i)
-      (fun result ->
-        Assert.AreEqual(Ok(response_data i), result)
-        ignore (pending_received_responses.Signal() : bool))
+    Rpc.dispatch rpc connection (query_data i) (fun result ->
+      Assert.AreEqual(Ok(response_data i), result)
+      ignore (pending_received_responses.Signal() : bool))
     |> Result.ok_exn
 
   let dispatch_indices = List.init num_dispatches id
@@ -74,12 +70,11 @@ let ``Can send RPCs and pass responses to handler`` () =
 
   // Send responses in reverse order to test multiplexing
   List.rev received_queries
-  |> List.iter
-       (fun (i, query) ->
-         Test_connection.send_string_response
-           test_connection
-           { id = query.id
-             data = Ok(response_data i) })
+  |> List.iter (fun (i, query) ->
+    Test_connection.send_string_response
+      test_connection
+      { id = query.id
+        data = Ok(response_data i) })
 
   pending_received_responses.Wait()
 
@@ -88,7 +83,7 @@ let bin_error = Bin_prot.Type_class.bin_unit
 let pipe_rpc =
   Pipe_rpc.create
     { Rpc_description.name = "test-pipe-rpc"
-      Rpc_description.version = 1 }
+      Rpc_description.version = 1L }
     Bin_prot.Type_class.bin_string
     Bin_prot.Type_class.bin_string
     bin_error
@@ -136,17 +131,15 @@ let ``Can send pipe RPCs and pass responses to handler`` () =
 
   let responses =
     List.map
-      (fun (query_i, (query : _ Query.t)) ->
+      (fun (query_i, (query : _ Query_v1.t)) ->
         [ Pipe_response.Initial
             { bin_writer_error = bin_error.writer
               query_id = query.id
               response = Ok() } ]
-        @ List.init
-            responses_per_query
-            (fun response_i ->
-              Pipe_response.Update
-                { query_id = query.id
-                  response = Stream_response_data.t.Ok(response_data query_i response_i) })
+        @ List.init responses_per_query (fun response_i ->
+            Pipe_response.Update
+              { query_id = query.id
+                response = Stream_response_data.t.Ok(response_data query_i response_i) })
           @ [ Pipe_response.Update
                 { query_id = query.id
                   response = Stream_response_data.t.Eof } ])

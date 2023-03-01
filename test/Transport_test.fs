@@ -112,10 +112,9 @@ let ``The reader can parse bin-io sent from a writer`` () =
       Sexp.Atom "lorem ipsum" ]
 
   sexps
-  |> Seq.iter
-       (fun sexp ->
-         let result = Writer.send_bin_prot transport.writer Sexp.bin_writer_t sexp
-         Assert.AreEqual(result, Send_result.Sent()))
+  |> Seq.iter (fun sexp ->
+    let result = Writer.send_bin_prot transport.writer Sexp.bin_writer_t sexp
+    Assert.AreEqual(result, Send_result.Sent()))
 
   Writer.For_testing.wait_for_flushed transport.writer
 
@@ -158,7 +157,7 @@ let ``Writer errors if size too large`` () =
 // each read for the purposes of testing [on_end_of_batch] below.
 type Slow_memory_stream () =
   inherit System.IO.MemoryStream ()
-  override this.Read(buffer, pos, (_length : int)) = base.Read(buffer, pos, 1)
+  override this.Read(buffer, pos, (_length : int)) = ``base``.Read(buffer, pos, 1)
 
 [<Test>]
 let ``The reader calls 'on_end_of_batch' after any data from the stream`` () =
@@ -276,7 +275,7 @@ type Blockable_memory_stream () =
 
   override this.Write(buffer, offset, count) =
     ignore (writes_go_through_event.WaitOne() : bool)
-    base.Write(buffer, offset, count)
+    ``base``.Write(buffer, offset, count)
 
 [<Test>]
 let ``Stream writing can be blocked without blocking [send_bin_prot]`` () =

@@ -10,7 +10,7 @@ type t
 val create :
   {| for_connection : Time_source.t
      for_fake_network_stream : Time_source.t |} ->
-  t * Connection.t
+    t * Connection.t
 
 val create_with_fixed_time_source : unit -> t * Connection.t
 

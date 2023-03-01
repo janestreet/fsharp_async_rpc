@@ -12,7 +12,7 @@ let execute_implementation
   (f : 'connection_state -> 'query -> 'response)
   (bin_response : 'response Bin_prot.Type_class.t)
   connection_state
-  (query : Bin_prot.Nat0.t Query.t)
+  (query : Bin_prot.Nat0.t Query_v1.t)
   read_buffer
   read_buffer_pos_ref
   transport_writer
@@ -37,9 +37,8 @@ let execute_implementation
       async {
         let response_data =
           Core_kernel.Or_error.try_with (fun () -> f connection_state typed_query)
-          |> Result.mapError
-               (fun error ->
-                 Protocol.Rpc_error.t.Uncaught_exn(Sexp.t.Atom(sprintf "%A" error)))
+          |> Result.mapError (fun error ->
+            Protocol.Rpc_error.t.Uncaught_exn(Sexp.t.Atom(sprintf "%A" error)))
 
         let response : _ Response.t = { id = query.id; data = response_data }
 
@@ -52,25 +51,23 @@ let execute_implementation
             (Message.t.Response response)
           |> Transport.Send_result.to_or_error
 
-        Result.iter_error
-          result
-          (fun error ->
-            // A sending error indicates an issue with the connection, in which case the
-            // connection should close.
-            Log.printfn
-              "Write error: (query: %A) (response: %A) (error %A)"
-              typed_query
-              response_data
-              error
+        Result.iter_error result (fun error ->
+          // A sending error indicates an issue with the connection, in which case the
+          // connection should close.
+          Log.printfn
+            "Write error: (query: %A) (response: %A) (error %A)"
+            typed_query
+            response_data
+            error
 
-            Writer.close transport_writer)
+          Writer.close transport_writer)
       }
   }
 
 module With_connection_state =
   type t =
     { rpc_description : Rpc_description.t
-      run : Bin_prot.Nat0.t Query.t
+      run : Bin_prot.Nat0.t Query_v1.t
         -> buf
         -> pos_ref
         -> Transport.Writer.t
@@ -78,7 +75,7 @@ module With_connection_state =
 
   let run
     t
-    (query : Bin_prot.Nat0.t Query.t)
+    (query : Bin_prot.Nat0.t Query_v1.t)
     read_buffer
     read_buffer_pos_ref
     transport_writer
@@ -90,9 +87,8 @@ module With_connection_state =
 type 'connection_state t = T of ('connection_state -> With_connection_state.t)
 
 let create query_reader f response_writer rpc_description : 'connection_state t =
-  T
-    (fun connection_state ->
-      { rpc_description = rpc_description
-        run = (execute_implementation query_reader f response_writer connection_state) })
+  T (fun connection_state ->
+    { rpc_description = rpc_description
+      run = (execute_implementation query_reader f response_writer connection_state) })
 
 let add_connection_state (T t) connection_state = t connection_state

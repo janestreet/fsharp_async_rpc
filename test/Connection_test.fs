@@ -27,7 +27,7 @@ let ``Connection errors out on invalid handshake response`` () =
     "garbage"
 
   let connection =
-    Connection.For_testing.create_wait_for_connection
+    Connection.create_async
       connection_stream
       Time_source.Constant.dotnet_epoch
       Known_protocol.Rpc
@@ -36,7 +36,7 @@ let ``Connection errors out on invalid handshake response`` () =
   Assert.That(
     sprintf
       "%A"
-      (match connection with
+      (match connection.Result with
        | Error e -> e
        | Ok x -> failwithf "got unexpected OK: %A" x),
     Does.Match("Handshake error: .*")
@@ -52,15 +52,13 @@ let ``Connection errors out on handshake timeout`` () =
   let connection_task =
     let task = System.Threading.Tasks.TaskCompletionSource<_>()
 
-    Thread.spawn_and_ignore
-      "test connection creation thread"
-      (fun () ->
-        Connection.create
-          connection_stream
-          time_source
-          Known_protocol.Rpc
-          {| max_message_size = Transport.default_max_message_size |}
-          task.SetResult)
+    Thread.spawn_and_ignore "test connection creation thread" (fun () ->
+      Connection.create
+        connection_stream
+        time_source
+        Known_protocol.Rpc
+        {| max_message_size = Transport.default_max_message_size |}
+        task.SetResult)
 
     task.Task
 
@@ -71,20 +69,20 @@ let ``Connection errors out on handshake timeout`` () =
 
   Assert.That(sprintf "%A" connection_task.Result, Does.Match("Read timed out"))
 
-let query : string Query.t =
+let query : string Query_v1.t =
   { tag = "test-rpc"
     version = 1L
-    id = Query.Id.create ()
+    id = Query_id.create ()
     data = "hello world" }
 
-let query_with_length_only = Query.map_data query Bin_prot.Size.bin_size_string
+let query_with_length_only = Query_v1.map_data query Bin_prot.Size.bin_size_string
 
 let expect_query test_connection =
   Transport.Reader.For_testing.consume_one_transport_message
     (Test_connection.reader test_connection)
     [ Bin_prot_reader.expect
         Message.bin_reader_nat0_t
-        (Message.t.Query query_with_length_only)
+        (Message.t.Query_v1 query_with_length_only)
       Bin_prot_reader.expect Bin_prot.Type_class.bin_reader_string query.data ]
 
 let dispatch_query connection response_handler =
@@ -136,7 +134,7 @@ let ``Connection sends heartbeats after fixed period`` () =
     Connection.For_testing.send_heartbeat_every
     - epsilon
 
-  for (_ : int) in 1 .. 10 do
+  for (_ : int) in 1..10 do
     time_source.advance_after_sleep_by period_minus_epsilon
 
     // Even though we almost hit the heartbeat period, no heartbeat has been sent yet.

@@ -18,8 +18,10 @@ val create :
   'connection_state Implementation.t list ->
   Connection.Concurrency.t ->
   {| port : int
-     initial_connection_state : Socket -> 'connection_state |} ->
-  t
+     initial_connection_state : Socket -> Connection.t -> 'connection_state |} ->
+    t
+
+val stop_accepting_new_connections : t -> unit
 
 module For_testing =
   val create_on_free_port :
@@ -28,5 +30,5 @@ module For_testing =
     Known_protocol.With_krb_support.t ->
     'connection_state Implementation.t list ->
     Connection.Concurrency.t ->
-    {| initial_connection_state : Socket -> 'connection_state |} ->
-    t
+    {| initial_connection_state : Socket -> Connection.t -> 'connection_state |} ->
+      t

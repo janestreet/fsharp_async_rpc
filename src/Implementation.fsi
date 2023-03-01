@@ -15,7 +15,7 @@ val create :
   ('connection_state -> 'query -> 'response) ->
   ('response Bin_prot.Type_class.t) ->
   Rpc_description.t ->
-  'connection_state t
+    'connection_state t
 
 // OCaml is able to store ['connection_state Implementation.t]s alongside the
 // ['connection_state]s directly inside the [Connection], without [Connection] gaining a
@@ -28,11 +28,11 @@ module With_connection_state =
 
   val run :
     t ->
-    Bin_prot.Nat0.t Query.t ->
+    Bin_prot.Nat0.t Query_v1.t ->
     buf ->
     pos_ref ->
     Transport.Writer.t ->
-    Result.t<unit Async, Rpc_error.t>
+      Result.t<unit Async, Rpc_error.t>
 
   val rpc_description : t -> Rpc_description.t
 

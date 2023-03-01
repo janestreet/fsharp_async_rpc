@@ -11,7 +11,7 @@ module Rpc =
     Rpc_description.t ->
     bin_query : 'query Bin_prot.Type_class.t ->
     bin_response : 'response Bin_prot.Type_class.t ->
-    t<'query, 'response>
+      t<'query, 'response>
 
 
   val dispatch :
@@ -19,7 +19,7 @@ module Rpc =
     Connection.t ->
     'query ->
     (Result<'response, Rpc_error.t> -> unit) ->
-    unit Or_error.t
+      unit Or_error.t
 
   /// Dispatch an rpc query using .NET Task instead of a callback. Any binds will still
   /// end up being ran on the [Async_rpc.Connection] reader thread so it is not too
@@ -47,7 +47,7 @@ module Pipe_rpc =
     bin_query : 'query Bin_prot.Type_class.t ->
     bin_response : 'response Bin_prot.Type_class.t ->
     bin_error : 'error Bin_prot.Type_class.t ->
-    t<'query, 'response, 'error>
+      t<'query, 'response, 'error>
 
   val dispatch_iter :
     t<'query, 'response, 'error> ->
@@ -55,4 +55,4 @@ module Pipe_rpc =
     'query ->
     initial_handler : (Result<Result<unit, 'error>, Rpc_error.t> -> unit) ->
     update_handler : ('response Pipe_message.t -> unit) ->
-    unit Or_error.t
+      unit Or_error.t

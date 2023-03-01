@@ -10,21 +10,20 @@ module Menu =
   let rpc =
     Rpc.create
       { Rpc_description.name = "__Versioned_rpc.Menu"
-        Rpc_description.version = 1 }
+        Rpc_description.version = 1L }
       Menu.V1.T.bin_query
       Menu.V1.T.bin_response
 
   type t = Rpc_description.t list
 
   let of_alist =
-    List.map
-      (fun (name, version) ->
-        { Rpc_description.name = name
-          Rpc_description.version = version })
+    List.map (fun (name, version) ->
+      { Rpc_description.name = name
+        Rpc_description.version = version })
 
   let to_alist =
-    List.map
-      (fun (description : Rpc_description.t) -> (description.name, description.version))
+    List.map (fun (description : Rpc_description.t) ->
+      (description.name, description.version))
 
   let add implementations =
     let menu =

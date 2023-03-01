@@ -11,4 +11,4 @@ val read_and_verify_length :
   pos ref ->
   len : int ->
   location : string ->
-  Result<'a, Protocol.Rpc_error.t>
+    Result<'a, Protocol.Rpc_error.t>

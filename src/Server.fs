@@ -14,17 +14,18 @@ type t =
 
 let port t = t.port
 
+let stop_accepting_new_connections t = t.tcp_listener.Stop()
+
 let wait_for_connection t create_connection =
   async {
     while true do
-      // [create_connection] takes ownership of [tcp_client] and handles closing
+      // Calling tcp_listener.Stop Throws a SocketException which ends the while loop
+      // and starting with Async.Start ensures the exception doesn't propagate
       let! tcp_client =
         t.tcp_listener.AcceptTcpClientAsync()
         |> Async.AwaitTask
 
       create_connection tcp_client
-
-    t.tcp_listener.Stop()
   }
   |> Async.Start
 
@@ -43,7 +44,6 @@ let create_with_tcp_listener
     // Ownership of the stream is taken by [Async_rpc.Transport] so we don't need to
     // worry about closing.
     let stream = tcp_client.GetStream() :> System.IO.Stream
-    let connection_state = initial_connection_state tcp_client.Client
 
     let connection_callback =
       function
@@ -61,12 +61,10 @@ let create_with_tcp_listener
       stream
       time_source
       protocol
-      {| max_message_size = Async_rpc.Transport.default_max_message_size |}
+      {| max_message_size = Async_rpc.Transport.default_max_message_size
+         connection_state = initial_connection_state tcp_client.Client |}
       connection_callback
-      (List.map
-        (fun implementation ->
-          Implementation.add_connection_state implementation connection_state)
-        implementations_list)
+      implementations_list
       concurrency
 
   let t =
@@ -84,7 +82,7 @@ let create
   implementations_list
   concurrency
   (args : {| port : int
-             initial_connection_state : Socket -> 'connection_state |})
+             initial_connection_state : Socket -> Connection.t -> 'connection_state |})
   =
   let tcp_listener = new TcpListener(localaddr = address, port = args.port)
 
@@ -103,7 +101,7 @@ module For_testing =
     protocol
     implementations_list
     concurrency
-    (args : {| initial_connection_state : Socket -> 'connection_state |})
+    (args : {| initial_connection_state : Socket -> Connection.t -> 'connection_state |})
     =
     let tcp_listener = new TcpListener(address, 0)
 

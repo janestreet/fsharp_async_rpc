@@ -2,11 +2,11 @@ module Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Principal
 open Bin_prot.Write
 open Bin_prot.Read
 open Bin_prot.Size
-module Stable = struct
-  module Name = struct
-    module V1 = struct
-      module T = struct
-        module Generated_0 = struct
+module Stable =
+  module Name =
+    module V1 =
+      module T =
+        module Generated_0 =
           type t = {
             service: string ;
             hostname: string }
@@ -43,7 +43,6 @@ module Stable = struct
               Bin_prot.Type_class.writer = bin_writer_t;
               Bin_prot.Type_class.reader = bin_reader_t
             }
-        end
         type t =
           | User of string 
           | Service of Generated_0.t 
@@ -88,7 +87,3 @@ module Stable = struct
             Bin_prot.Type_class.writer = bin_writer_t;
             Bin_prot.Type_class.reader = bin_reader_t
           }
-      end
-    end
-  end
-end

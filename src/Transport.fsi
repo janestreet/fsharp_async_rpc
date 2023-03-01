@@ -49,7 +49,7 @@ module Reader =
     t ->
     on_message : (byte [] -> 'a Handler_result.t) ->
     on_end_of_batch : (unit -> unit) ->
-    Result<'a, Error.t>
+      Result<'a, Error.t>
 
   val read_one_message_bin_prot :
     t -> 'a Bin_prot.Type_class.reader -> Result<'a, Error.t>

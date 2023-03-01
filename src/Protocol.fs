@@ -21,14 +21,13 @@ module Message =
   let bin_reader_nat0_t : Bin_prot.Nat0.t Message.needs_length Bin_prot.Type_class.reader =
     Message.bin_reader_needs_length Bin_prot.Type_class.bin_reader_nat0
 
-module Query =
-  module Id =
-    type t = Query_id.t
+module Query_id =
+  type t = Query_id.t
 
-    let create =
-      let next = ref 0L in fun () -> System.Threading.Interlocked.Increment next
+  let create = let next = ref 0L in fun () -> System.Threading.Interlocked.Increment next
 
-  type 'a t = 'a Query.needs_length
+module Query_v1 =
+  type 'a t = 'a Query_v1.needs_length
 
   let map_data
     ({ tag = tag
@@ -40,6 +39,23 @@ module Query =
     ({ tag = tag
        version = version
        id = id
+       data = f data } : 'b t)
+
+module Query =
+  type 'a t = 'a Query.needs_length
+
+  let map_data
+    ({ tag = tag
+       version = version
+       id = id
+       metadata = metadata
+       data = data } : 'a t)
+    f
+    =
+    ({ tag = tag
+       version = version
+       id = id
+       metadata = metadata
        data = f data } : 'b t)
 
 module Response =

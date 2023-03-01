@@ -26,11 +26,11 @@ let send_pipe_update test_connection query_id response =
 
 type 'a initial =
   { bin_writer_error : 'a Bin_prot.Type_class.writer
-    query_id : Query.Id.t
+    query_id : Query_id.t
     response : Result<unit, 'a> }
 
 type update =
-  { query_id : Query.Id.t
+  { query_id : Query_id.t
     response : string Stream_response_data.t }
 
 type 'a t =

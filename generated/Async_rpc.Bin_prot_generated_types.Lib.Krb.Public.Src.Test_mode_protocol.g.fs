@@ -2,8 +2,8 @@ module Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Test_mode_protocol
 open Bin_prot.Write
 open Bin_prot.Read
 open Bin_prot.Size
-module Ack = struct
-  type t = unit Core_kernel.Bin_prot_generated_types.Lib.Dotnet.Core_with_dotnet.Src.Or_error.T.t
+module Ack =
+  type t = Core_kernel.Bin_prot_generated_types.Lib.Dotnet.Core_with_dotnet.Src.Or_error.T.t<unit>
   let bin_size_t v =
     Core_kernel.Bin_prot_generated_types.Lib.Dotnet.Core_with_dotnet.Src.Or_error.T.bin_size_t
       bin_size_unit v
@@ -31,8 +31,7 @@ module Ack = struct
       Bin_prot.Type_class.writer = bin_writer_t;
       Bin_prot.Type_class.reader = bin_reader_t
     }
-end
-module Syn = struct
+module Syn =
   type t = Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Principal.Stable.Name.V1.T.t
   let bin_size_t =
     Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Principal.Stable.Name.V1.T.bin_size_t
@@ -57,4 +56,3 @@ module Syn = struct
       Bin_prot.Type_class.writer = bin_writer_t;
       Bin_prot.Type_class.reader = bin_reader_t
     }
-end

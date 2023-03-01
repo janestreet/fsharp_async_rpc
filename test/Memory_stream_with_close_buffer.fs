@@ -12,5 +12,5 @@ type t () =
     | None -> failwithf "Stream is not yet closed"
 
   override this.Close() =
-    buffer_at_close <- Some(base.GetBuffer().[..(int (base.Position) - 1)])
+    buffer_at_close <- Some(base.GetBuffer().[.. (int (base.Position) - 1)])
     base.Close()

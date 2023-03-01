@@ -18,14 +18,14 @@ let ip_address = "127.0.0.1"
 let string_rpc =
   Rpc.create
     { Rpc_description.name = "string-rpc"
-      Rpc_description.version = 1 }
+      Rpc_description.version = 1L }
     Type_class.bin_string
     Type_class.bin_string
 
 let int_rpc =
   Rpc.create
     { Rpc_description.name = "int-rpc"
-      Rpc_description.version = 2 }
+      Rpc_description.version = 2L }
     Type_class.bin_int64
     Type_class.bin_int64
 
@@ -50,9 +50,8 @@ let start_client_and_dispatch_queries port rpc (queries : 'query list) =
     | Ok connection ->
       List.zip queries on_responses
       |> List.map
-           (fun (query,
-                 (on_response : TaskCompletionSource<Result<'response, Rpc_error.t>>)) ->
-             Async_rpc.Rpc.dispatch rpc connection query (on_response.SetResult))
+        (fun (query, (on_response : TaskCompletionSource<Result<'response, Rpc_error.t>>)) ->
+          Async_rpc.Rpc.dispatch rpc connection query (on_response.SetResult))
       |> Result.all_unit
       |> on_dispatch.SetResult
 
@@ -83,7 +82,7 @@ let setup_server implementations_list initial_connection_state concurrency =
     concurrency
     {| initial_connection_state = initial_connection_state |}
 
-let ignore_connection_state = ignore
+let ignore_connection_state (_ : Socket) (_ : Async_rpc.Connection.t) = ()
 
 let wait_for_all_responses_ok_exn on_response_tasks =
   List.map
@@ -100,16 +99,14 @@ let ``Hanging implementations do not cause the client thread to block`` () =
   let mutable hang_implementations = true
 
   let implementations_list =
-    [ create_implementation
-        int_rpc
-        (fun () query ->
-          reached_implementation <- true
+    [ create_implementation int_rpc (fun () query ->
+        reached_implementation <- true
 
-          // the following loop guarantees thread consumption
-          while hang_implementations do
-            ()
+        // the following loop guarantees thread consumption
+        while hang_implementations do
+          ()
 
-          query) ]
+        query) ]
 
   let server =
     setup_server
@@ -126,10 +123,9 @@ let ``Hanging implementations do not cause the client thread to block`` () =
     List.map
       (fun query -> start_client_and_dispatch_queries port int_rpc [ query ])
       queries
-    |> List.map
-         (fun (on_dispatch, on_result) ->
-           Result.ok_exn on_dispatch.Result
-           on_result)
+    |> List.map (fun (on_dispatch, on_result) ->
+      Result.ok_exn on_dispatch.Result
+      on_result)
     |> List.concat
 
   while not reached_implementation do
@@ -179,16 +175,15 @@ module Connection_state =
 [<Test>]
 [<Category("Server")>]
 let ``Custom connection state`` () =
-  let initial_connection_state (_ : Socket) = { Connection_state.total = 0L }
+  let initial_connection_state (_ : Socket) (_ : Async_rpc.Connection.t) =
+    { Connection_state.total = 0L }
 
   // Implementations are executed in the thread pool so we cannot assume queries are
   // handled in order.
   let add_last_query (connection_state : Connection_state.t) query =
-    lock
-      connection_state
-      (fun () ->
-        connection_state.total <- connection_state.total + query
-        connection_state.total)
+    lock connection_state (fun () ->
+      connection_state.total <- connection_state.total + query
+      connection_state.total)
 
   let implementation_list = [ create_implementation int_rpc add_last_query ]
 
@@ -221,3 +216,54 @@ let ``Custom connection state`` () =
     setup_server_and_run_queries Connection.Concurrency.Sequential
 
   Assert.AreEqual(expected_in_order_responses, responses_sequential)
+
+[<Test>]
+[<Category("Server")>]
+let ``stop stops accepting connections without closing existing`` () =
+  let time_source = new Time_source.Wall_clock.t ()
+  let string_implementation = (fun () query -> "Received " + query)
+
+  let implementation_list = [ create_implementation string_rpc string_implementation ]
+
+  let server =
+    setup_server
+      implementation_list
+      ignore_connection_state
+      Connection.Concurrency.Parallel
+
+  let port = Server.port server
+
+  let client = new TcpClient(ip_address, port)
+  let stream = client.GetStream() :> System.IO.Stream
+
+  let conn =
+    (Connection.create_async
+      stream
+      time_source
+      Known_protocol.Rpc
+      {| max_message_size = Transport.default_max_message_size |})
+      .Result
+    |> Result.ok_exn
+
+  let first_dispatch =
+    (Rpc.dispatch_async string_rpc conn "first")
+      .Result
+    |> Result.ok_exn
+
+  Assert.AreEqual(first_dispatch, "Received first")
+
+  Server.stop_accepting_new_connections server
+
+  let second_dispatch =
+    (Rpc.dispatch_async string_rpc conn "second")
+      .Result
+    |> Result.ok_exn
+
+  Assert.AreEqual(second_dispatch, "Received second")
+
+  Connection.close conn
+  client.Close()
+
+  let exn = Assert.Catch(fun () -> new TcpClient(ip_address, port) |> ignore)
+  Assert.IsInstanceOf<SocketException>(exn)
+  Assert.That(exn.Message.Contains("Connection refused"))

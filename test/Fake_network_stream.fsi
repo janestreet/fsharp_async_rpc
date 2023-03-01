@@ -1,6 +1,7 @@
 module Async_rpc.Test.Fake_network_stream
 
 open Core_kernel
+
 /// This type acts as a drop-in replacement for a [NetworkStream], where writing to one
 /// end of a pair makes data available to read from the other end.
 [<SealedAttribute>]

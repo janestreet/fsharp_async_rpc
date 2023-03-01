@@ -1,35 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+     <PropertyGroup>
+     <TargetFramework>netstandard2.0</TargetFramework>
+     <!-- 1182: Warn on unused.
+     3218: Check that argument names in signatures and implementations match. -->
+     <OtherFlags>--warnaserror+ --warnon:1182,3218</OtherFlags>
+     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+     <EmbedAllSources>true</EmbedAllSources>
+     <DebugType>embedded</DebugType>
+     </PropertyGroup>
 
-         <Project Sdk="Microsoft.NET.Sdk">
-         <PropertyGroup>
-         <TargetFramework>netstandard2.0</TargetFramework>
-         <!-- 3370: Ignore deprecation info messages for dereferencing using [!] instead of [.Value] in the generated files since they are generated using OCaml and it will be backward compatible (FS-1111).
+     <ItemGroup>
+         <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Async_rpc_kernel.Src.Versioned_rpc.g.fs" />
+    <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Principal.g.fs" />
+    <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Test_mode_protocol.g.fs" />
+    <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Async_rpc_kernel.Src.Protocol.g.fs" />
+    <Compile Include="Async_rpc.Bin_prot_generated_types.Async_protocol_header.g.fs" />
+     </ItemGroup>
 
-              1182: Warn on unused.
-
-              3218: Check that argument names in signatures and implementations match.
-
-              mlcompatibility: Turn on the ml compatibility flag, as this code is generated using ocaml -->
-         <OtherFlags>--warnaserror+ --warnon:1182,3218 --nowarn:3370 --mlcompatibility</OtherFlags>
-         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-         <EmbedAllSources>true</EmbedAllSources>
-         <DebugType>embedded</DebugType>
-         </PropertyGroup>
-         <ItemGroup>
-             <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Async_rpc_kernel.Src.Versioned_rpc.fs" />
-    <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Principal.fs" />
-    <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Test_mode_protocol.fs" />
-    <Compile Include="Async_rpc.Bin_prot_generated_types.Lib.Async_rpc_kernel.Src.Protocol.fs" />
-    <Compile Include="Async_rpc.Bin_prot_generated_types.Async_protocol_header.fs" />
-         </ItemGroup>
-
-         <ItemGroup>
-             <ProjectReference Include="../../../../lib/dotnet-libs/bin_prot/src/Bin_prot.fsproj" />
+     <ItemGroup>
+         <ProjectReference Include="../../../../lib/dotnet-libs/bin_prot/src/Bin_prot.fsproj" />
     <ProjectReference Include="../../../../lib/dotnet-libs/core_kernel/generated/Core_kernel.Bin_prot_generated_types.fsproj" />
-         </ItemGroup>
+     </ItemGroup>
 
-         <Target Name="CleanOutputDirs" AfterTargets="Clean">
-         <RemoveDir Directories="$(BaseIntermediateOutputPath)" /><!-- obj -->
-         <RemoveDir Directories="$(BaseOutputPath)" /><!-- bin -->
-         </Target>
-         </Project>
-         
+     <Target Name="CleanOutputDirs" AfterTargets="Clean">
+     <RemoveDir Directories="$(BaseIntermediateOutputPath)" /><!-- obj -->
+     <RemoveDir Directories="$(BaseOutputPath)" /><!-- bin -->
+     </Target>
+     </Project>
+     
