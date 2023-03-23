@@ -5,15 +5,21 @@ open Bin_prot.Common
 
 type 'connection_state t
 
+module Kind =
+  module Rpc =
+    type t<'connection_state, 'query, 'response> =
+      { bin_query : 'query Bin_prot.Type_class.t
+        bin_response : 'response Bin_prot.Type_class.t
+        impl : 'connection_state -> 'query -> 'response }
+
+  type t<'connection_state, 'query, 'response, 'update> =
+    | Rpc of Rpc.t<'connection_state, 'query, 'response>
+
 // When adding an [Async_rpc.Implementation] in F# users should note that function may be
 // run in the thread pool, depending on the concurrency setting on the server; in this
 // case, thread-safety must be considered.
-
-
 val create :
-  ('query Bin_prot.Type_class.t) ->
-  ('connection_state -> 'query -> 'response) ->
-  ('response Bin_prot.Type_class.t) ->
+  Kind.t<'connection_state, 'query, 'response, 'update> ->
   Rpc_description.t ->
     'connection_state t
 

@@ -4,7 +4,6 @@ open Async_rpc
 open Async_rpc.Protocol
 open Core_kernel
 open Bin_prot_generated_types.Lib.Async_rpc_kernel.Src.Versioned_rpc
-open System.Threading.Tasks
 
 module Menu =
   let rpc =
@@ -26,18 +25,15 @@ module Menu =
       (description.name, description.version))
 
   let add implementations =
-    let menu =
-      Implementation.create
-        (Rpc.bin_query rpc)
-        (fun connection_state () ->
-          List.map
-            (fun implementation ->
-              (Implementation.add_connection_state implementation connection_state
-               |> Implementation.With_connection_state.rpc_description))
-            implementations
-          |> to_alist)
-        (Rpc.bin_response rpc)
-        (Rpc.description rpc)
+    let impl connection_state () =
+      List.map
+        (fun implementation ->
+          (Implementation.add_connection_state implementation connection_state
+           |> Implementation.With_connection_state.rpc_description))
+        implementations
+      |> to_alist
+
+    let menu = Rpc.implement rpc impl
 
     menu :: implementations
 

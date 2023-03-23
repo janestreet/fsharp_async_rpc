@@ -8,10 +8,7 @@ open Bin_prot
 open Core_kernel
 open Async_rpc
 open Async_rpc.Protocol
-open System.Threading.Tasks
-open System.Runtime.CompilerServices
 open NUnit.Framework
-open System.Threading
 
 let ip_address = "127.0.0.1"
 
@@ -29,38 +26,39 @@ let int_rpc =
     Type_class.bin_int64
     Type_class.bin_int64
 
-let create_implementation rpc implementation_function =
-  Async_rpc.Implementation.create
-    (Rpc.bin_query rpc)
-    implementation_function
-    (Rpc.bin_response rpc)
-    (Rpc.description rpc)
-
-let start_client_and_dispatch_queries port rpc (queries : 'query list) =
-  let on_dispatch = new TaskCompletionSource<_>()
-  let on_responses = List.map (fun (_ : 'query) -> new TaskCompletionSource<_>()) queries
-
+let start_client port connection_callback =
   let client = new TcpClient(ip_address, port)
   let stream = client.GetStream() :> System.IO.Stream
   let time_source = new Time_source.Wall_clock.t ()
+  let on_connection = new TaskCompletionSource<_>()
 
   let connection_callback =
     function
-    | Error error -> on_dispatch.SetResult(Error error)
+    | Error error -> on_connection.SetResult(Error error)
     | Ok connection ->
-      List.zip queries on_responses
-      |> List.map
-        (fun (query, (on_response : TaskCompletionSource<Result<'response, Rpc_error.t>>)) ->
-          Async_rpc.Rpc.dispatch rpc connection query (on_response.SetResult))
-      |> Result.all_unit
-      |> on_dispatch.SetResult
+      connection_callback connection client
+      |> on_connection.SetResult
 
-  Async_rpc.Connection.create
+  Connection.create
     stream
     time_source
-    Async_rpc.Known_protocol.Rpc
-    {| max_message_size = Async_rpc.Transport.default_max_message_size |}
+    Known_protocol.Rpc
+    {| max_message_size = Transport.default_max_message_size |}
     connection_callback
+
+  on_connection.Task
+
+let start_client_and_dispatch_rpc port rpc (queries : 'query list) =
+  let on_responses = List.map (fun (_ : 'query) -> new TaskCompletionSource<_>()) queries
+
+  let connection_callback connection (_ : TcpClient) =
+    List.zip queries on_responses
+    |> List.map
+      (fun (query, (on_response : TaskCompletionSource<Result<'response, Rpc_error.t>>)) ->
+        Async_rpc.Rpc.dispatch rpc connection query (on_response.SetResult))
+    |> Result.all_unit
+
+  let on_dispatch = start_client port connection_callback
 
   let on_response_tasks =
     List.map
@@ -68,13 +66,13 @@ let start_client_and_dispatch_queries port rpc (queries : 'query list) =
         on_response.Task)
       on_responses
 
-  on_dispatch.Task, on_response_tasks
+  on_dispatch, on_response_tasks
 
 let setup_server implementations_list initial_connection_state concurrency =
   let time_source = new Time_source.Wall_clock.t ()
   let local_address = IPAddress.Parse ip_address
 
-  Async_rpc.Server.For_testing.create_on_free_port
+  Server.For_testing.create_on_free_port
     local_address
     time_source
     Known_protocol.Rpc
@@ -82,7 +80,7 @@ let setup_server implementations_list initial_connection_state concurrency =
     concurrency
     {| initial_connection_state = initial_connection_state |}
 
-let ignore_connection_state (_ : Socket) (_ : Async_rpc.Connection.t) = ()
+let ignore_connection_state (_ : Socket) (_ : Connection.t) = ()
 
 let wait_for_all_responses_ok_exn on_response_tasks =
   List.map
@@ -99,7 +97,7 @@ let ``Hanging implementations do not cause the client thread to block`` () =
   let mutable hang_implementations = true
 
   let implementations_list =
-    [ create_implementation int_rpc (fun () query ->
+    [ Rpc.implement int_rpc (fun () query ->
         reached_implementation <- true
 
         // the following loop guarantees thread consumption
@@ -120,9 +118,7 @@ let ``Hanging implementations do not cause the client thread to block`` () =
   let queries = List.init large_number_of_clients int64
 
   let on_responses =
-    List.map
-      (fun query -> start_client_and_dispatch_queries port int_rpc [ query ])
-      queries
+    List.map (fun query -> start_client_and_dispatch_rpc port int_rpc [ query ]) queries
     |> List.map (fun (on_dispatch, on_result) ->
       Result.ok_exn on_dispatch.Result
       on_result)
@@ -143,8 +139,8 @@ let ``Multiple clients making different rpc calls`` () =
   let int_implementation = (fun () query -> query + 1L)
 
   let implementation_list =
-    [ create_implementation string_rpc string_implementation
-      create_implementation int_rpc int_implementation ]
+    [ Rpc.implement string_rpc string_implementation
+      Rpc.implement int_rpc int_implementation ]
 
   let server =
     setup_server
@@ -155,10 +151,10 @@ let ``Multiple clients making different rpc calls`` () =
   let port = Server.port server
 
   let (on_dispatch_client_1, on_responses_client_1) =
-    start_client_and_dispatch_queries port string_rpc [ "query" ]
+    start_client_and_dispatch_rpc port string_rpc [ "query" ]
 
   let (on_dispatch_client_2, on_responses_client_2) =
-    start_client_and_dispatch_queries port int_rpc [ 0L; 1L; 2L ]
+    start_client_and_dispatch_rpc port int_rpc [ 0L; 1L; 2L ]
 
   Result.ok_exn on_dispatch_client_1.Result
   Result.ok_exn on_dispatch_client_2.Result
@@ -175,7 +171,7 @@ module Connection_state =
 [<Test>]
 [<Category("Server")>]
 let ``Custom connection state`` () =
-  let initial_connection_state (_ : Socket) (_ : Async_rpc.Connection.t) =
+  let initial_connection_state (_ : Socket) (_ : Connection.t) =
     { Connection_state.total = 0L }
 
   // Implementations are executed in the thread pool so we cannot assume queries are
@@ -185,7 +181,7 @@ let ``Custom connection state`` () =
       connection_state.total <- connection_state.total + query
       connection_state.total)
 
-  let implementation_list = [ create_implementation int_rpc add_last_query ]
+  let implementation_list = [ Rpc.implement int_rpc add_last_query ]
 
   let queries = List.init 50 int64
 
@@ -193,7 +189,7 @@ let ``Custom connection state`` () =
     let server = setup_server implementation_list initial_connection_state concurrency
     let port = Server.port server
 
-    start_client_and_dispatch_queries port int_rpc queries
+    start_client_and_dispatch_rpc port int_rpc queries
     |> snd
     |> wait_for_all_responses_ok_exn
 
@@ -217,13 +213,19 @@ let ``Custom connection state`` () =
 
   Assert.AreEqual(expected_in_order_responses, responses_sequential)
 
+let assert_connection_refused port =
+  let exn = Assert.Catch(fun () -> new TcpClient(ip_address, port) |> ignore)
+  Assert.IsInstanceOf<SocketException>(exn)
+  Assert.That(exn.Message.Contains("Connection refused"))
+
 [<Test>]
 [<Category("Server")>]
-let ``stop stops accepting connections without closing existing`` () =
-  let time_source = new Time_source.Wall_clock.t ()
+let ``stop_accepting_new_connections stops accepting connections without closing existing``
+  ()
+  =
   let string_implementation = (fun () query -> "Received " + query)
 
-  let implementation_list = [ create_implementation string_rpc string_implementation ]
+  let implementation_list = [ Rpc.implement string_rpc string_implementation ]
 
   let server =
     setup_server
@@ -233,15 +235,8 @@ let ``stop stops accepting connections without closing existing`` () =
 
   let port = Server.port server
 
-  let client = new TcpClient(ip_address, port)
-  let stream = client.GetStream() :> System.IO.Stream
-
-  let conn =
-    (Connection.create_async
-      stream
-      time_source
-      Known_protocol.Rpc
-      {| max_message_size = Transport.default_max_message_size |})
+  let conn, client =
+    (start_client port (fun conn client -> Ok(conn, client)))
       .Result
     |> Result.ok_exn
 
@@ -264,6 +259,141 @@ let ``stop stops accepting connections without closing existing`` () =
   Connection.close conn
   client.Close()
 
-  let exn = Assert.Catch(fun () -> new TcpClient(ip_address, port) |> ignore)
-  Assert.IsInstanceOf<SocketException>(exn)
-  Assert.That(exn.Message.Contains("Connection refused"))
+  assert_connection_refused port
+
+[<Test>]
+[<Category("Server")>]
+let ``close stops accepting connections and closes existing`` () =
+  let string_implementation = (fun () query -> "Received " + query)
+
+  let implementation_list = [ Rpc.implement string_rpc string_implementation ]
+
+  let server =
+    setup_server
+      implementation_list
+      ignore_connection_state
+      Connection.Concurrency.Parallel
+
+  let port = Server.port server
+
+  let conn_1, client_1 =
+    (start_client port (fun conn client -> Ok(conn, client)))
+      .Result
+    |> Result.ok_exn
+
+  let conn_2, client_2 =
+    (start_client port (fun conn client -> Ok(conn, client)))
+      .Result
+    |> Result.ok_exn
+
+  let close_task = (Server.close server)
+
+  Assert.IsTrue(
+    close_task.Wait(TimeSpan.FromSeconds(2.0)),
+    "Timeout exceeded while waiting for the server to close."
+  )
+
+  let response_from_connection_1_after_closing =
+    (Rpc.dispatch_async string_rpc conn_1 "conn_1")
+      .Result
+
+  let response_from_connection_2_after_closing =
+    (Rpc.dispatch_async string_rpc conn_2 "conn_2")
+      .Result
+
+  Assert.That(
+    sprintf "%A" response_from_connection_1_after_closing,
+    Does.Match("Close_started")
+  )
+
+  Assert.That(
+    sprintf "%A" response_from_connection_2_after_closing,
+    Does.Match("Close_started")
+  )
+
+  Assert.False(client_1.Connected)
+  Assert.False(client_2.Connected)
+
+  assert_connection_refused port
+
+[<Test>]
+[<Category("Server")>]
+let ``close stops accepting connections and determines immediately if there were no active connections``
+  ()
+  =
+  let server = setup_server [] ignore_connection_state Connection.Concurrency.Parallel
+
+  let close_task = (Server.close server)
+
+  Assert.IsTrue(
+    close_task.Wait(TimeSpan.FromSeconds(2.0)),
+    "Timeout exceeded while waiting for the server to close."
+  )
+
+  let port = Server.port server
+  assert_connection_refused port
+
+[<Test>]
+[<Category("Server")>]
+let ``close stops the server when existing connections were already closed`` () =
+  let server = setup_server [] ignore_connection_state Connection.Concurrency.Parallel
+
+  let port = Server.port server
+
+  let conn, client =
+    (start_client port (fun conn client -> Ok(conn, client)))
+      .Result
+    |> Result.ok_exn
+
+  Connection.close conn
+  client.Close()
+
+  Assert.IsTrue(
+    (Connection.close_finished conn)
+      .Wait(TimeSpan.FromSeconds(2.0)),
+    "Timeout exceeded while waiting for the connection to close."
+  )
+
+  let close_task = (Server.close server)
+
+  Assert.IsTrue(
+    close_task.Wait(TimeSpan.FromSeconds(2.0)),
+    "Timeout exceeded while waiting for the server to close."
+  )
+
+  assert_connection_refused port
+
+
+[<Test>]
+[<Category("Server")>]
+let ``Client connection is closed when state initialization throws an exception`` () =
+
+  let initial_connection_state (_ : Socket) (_ : Async_rpc.Connection.t) =
+    failwith "test-error"
+
+  let server = setup_server [] initial_connection_state Connection.Concurrency.Parallel
+
+  let port = Server.port server
+  use client = new TcpClient(ip_address, port)
+  let stream = client.GetStream() :> System.IO.Stream
+  let time_source = new Time_source.Wall_clock.t ()
+
+  let conn =
+    (Connection.create_async
+      stream
+      time_source
+      Known_protocol.Rpc
+      {| max_message_size = Transport.default_max_message_size |})
+      .Result
+
+  Assert.That(sprintf "%A" conn, Does.Match("End_of_stream"))
+  Assert.IsFalse(client.Connected)
+
+  let close_task = (Server.close server)
+
+  Assert.IsTrue(
+    close_task.Wait(TimeSpan.FromSeconds(2.0)),
+    "Timeout exceeded while waiting for the server to close."
+  )
+
+  assert_connection_refused port

@@ -19,6 +19,15 @@ module Rpc =
       bin_query = bin_query
       bin_response = bin_response }
 
+  let implement t f =
+    let implementation_kind =
+      Implementation.Kind.Rpc
+        { bin_query = t.bin_query
+          bin_response = t.bin_response
+          impl = f }
+
+    Implementation.create implementation_kind t.description
+
   let dispatch t conn query callback =
     let response_handler (response : _ Response.t) read_buffer read_buffer_pos_ref =
       let response =

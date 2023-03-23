@@ -7,10 +7,18 @@ open Async_rpc
 open Transport
 open Core_kernel.Bin_prot_generated_types.Lib.Dotnet.Core_with_dotnet.Src
 
+module Kind =
+  module Rpc =
+    type t<'connection_state, 'query, 'response> =
+      { bin_query : 'query Bin_prot.Type_class.t
+        bin_response : 'response Bin_prot.Type_class.t
+        impl : 'connection_state -> 'query -> 'response }
+
+  type t<'connection_state, 'query, 'response, 'update> =
+    | Rpc of Rpc.t<'connection_state, 'query, 'response>
+
 let execute_implementation
-  (bin_query : 'query Bin_prot.Type_class.t)
-  (f : 'connection_state -> 'query -> 'response)
-  (bin_response : 'response Bin_prot.Type_class.t)
+  (rpc : Kind.Rpc.t<'connection_state, 'query, 'response>)
   connection_state
   (query : Bin_prot.Nat0.t Query_v1.t)
   read_buffer
@@ -26,7 +34,7 @@ let execute_implementation
       let len = query.data
 
       Bin_prot_reader.read_and_verify_length
-        bin_query.reader
+        rpc.bin_query.reader
         None
         read_buffer
         read_buffer_pos_ref
@@ -36,7 +44,7 @@ let execute_implementation
     return
       async {
         let response_data =
-          Core_kernel.Or_error.try_with (fun () -> f connection_state typed_query)
+          Core_kernel.Or_error.try_with (fun () -> rpc.impl connection_state typed_query)
           |> Result.mapError (fun error ->
             Protocol.Rpc_error.t.Uncaught_exn(Sexp.t.Atom(sprintf "%A" error)))
 
@@ -46,7 +54,7 @@ let execute_implementation
           Transport.Writer.send_bin_prot
             transport_writer
             (Message.bin_writer_needs_length (
-              Writer_with_length.of_writer bin_response.writer
+              Writer_with_length.of_writer rpc.bin_response.writer
             ))
             (Message.t.Response response)
           |> Transport.Send_result.to_or_error
@@ -86,9 +94,11 @@ module With_connection_state =
 
 type 'connection_state t = T of ('connection_state -> With_connection_state.t)
 
-let create query_reader f response_writer rpc_description : 'connection_state t =
-  T (fun connection_state ->
-    { rpc_description = rpc_description
-      run = (execute_implementation query_reader f response_writer connection_state) })
+let create rpc_kind rpc_description : 'connection_state t =
+  match rpc_kind with
+  | Kind.Rpc rpc ->
+    T (fun connection_state ->
+      { rpc_description = rpc_description
+        run = execute_implementation rpc connection_state })
 
 let add_connection_state (T t) connection_state = t connection_state

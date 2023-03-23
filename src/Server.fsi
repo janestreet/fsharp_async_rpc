@@ -23,6 +23,11 @@ val create :
 
 val stop_accepting_new_connections : t -> unit
 
+/// Stops accepting new connections, initiates closing of the existing
+/// connections. Returned task is determined when all the existing connections
+/// were closed.
+val close : t -> Task<unit>
+
 module For_testing =
   val create_on_free_port :
     IPAddress ->

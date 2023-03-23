@@ -224,8 +224,6 @@ let handle_msg
           Transport.Handler_result.Continue
         | Error error -> Transport.Handler_result.Stop error)
 
-
-
 let on_message t implementations message =
   let buf = new Bin_prot.Buffer.Buffer<byte>(message : byte [])
   let pos_ref = ref 0
@@ -382,7 +380,9 @@ let create_with_implementations
     }
 
   Thread.spawn_and_ignore "connect then heartbeat loop" (fun () ->
-    match create_and_handshake () with
+    match (Or_error.try_with create_and_handshake)
+          |> Result.join
+      with
     | Ok (t, implementations, reader) ->
       Thread.spawn_and_ignore "reader loop" (fun () ->
         run_after_handshake t implementations reader)

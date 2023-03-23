@@ -13,6 +13,11 @@ module Rpc =
     bin_response : 'response Bin_prot.Type_class.t ->
       t<'query, 'response>
 
+  val implement :
+    t<'query, 'response> ->
+    ('connection_state -> 'query -> 'response) ->
+      'connection_state Implementation.t
+
 
   val dispatch :
     t<'query, 'response> ->
