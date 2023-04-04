@@ -6,9 +6,6 @@ open Async_rpc.Bin_prot_generated_types.Lib.Async_rpc_kernel.Src.Protocol
 open Async_rpc.Bin_prot_generated_types.Lib.Krb.Public.Src.Test_mode_protocol
 open Core_kernel.Bin_prot_generated_types
 
-module Rpc_result =
-  type 'a t = 'a Rpc_result.t
-
 module Message =
   type 'a t = 'a Message.needs_length
 
@@ -25,6 +22,11 @@ module Query_id =
   type t = Query_id.t
 
   let create = let next = ref 0L in fun () -> System.Threading.Interlocked.Increment next
+
+module Unused_query_id =
+  type t = Unused_query_id.t
+
+  let t () = Query_id.create ()
 
 module Query_v1 =
   type 'a t = 'a Query_v1.needs_length
@@ -103,10 +105,26 @@ module Rpc_error =
   module Unimplemented_rpc =
     type t = Rpc_error.Generated_0.t
 
+  let sexp_of_located_exn location (exn : exn) =
+    Sexp.t.Atom $"Exn during %s{location}: %O{exn}"
+
   let bin_io_exn location (exn : exn) =
-    Rpc_error.Bin_io_exn(Sexp.t.Atom(sprintf "Exn during %s: %O" location exn))
+    Rpc_error.Bin_io_exn(sexp_of_located_exn location exn)
+
+  let uncaught_exn location (exn : exn) =
+    Rpc_error.Uncaught_exn(sexp_of_located_exn location exn)
 
   let to_error (t : t) = Error.Of.format "%O" t
+
+module Rpc_result =
+  type 'a t = 'a Rpc_result.t
+
+  let try_with (f : unit -> Async<'a t>) location : Async<'a t> =
+    async {
+      match! Async.Catch(f ()) with
+      | Choice1Of2 value -> return value
+      | Choice2Of2 exn -> return (Error(Rpc_error.uncaught_exn location exn))
+    }
 
 module Response_handler =
   module Result =

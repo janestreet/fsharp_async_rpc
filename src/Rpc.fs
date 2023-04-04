@@ -80,12 +80,16 @@ module Pipe_message =
     | Closed_from_error of Error.t
 
 module Streaming_rpc =
+  module Initial_message = Stream_initial_message
+
   type ('query, 'initial_response, 'update_response, 'error_response) t =
     { description : Rpc_description.t
       bin_query : 'query Bin_prot.Type_class.t
       bin_initial_response : 'initial_response Bin_prot.Type_class.t
       bin_update_response : 'update_response Bin_prot.Type_class.t
       bin_error_response : 'error_response Bin_prot.Type_class.t }
+
+  let description t = t.description
 
   let create
     description
@@ -99,6 +103,39 @@ module Streaming_rpc =
       bin_initial_response = bin_initial_response
       bin_update_response = bin_update_response
       bin_error_response = bin_error_response }
+
+  let make_initial_message
+    (x : Result.t<'initial, 'error>)
+    : Initial_message.t<'initial, 'error> =
+    { unused_query_id = Unused_query_id.t ()
+      initial = x }
+
+  let implement
+    (t : t<'query, 'initial_response, 'update_response, 'error_response>)
+    (f : 'connection_state
+           -> 'query
+           -> Async<Result.t<'initial_response * 'update_response Pipe.Reader.t, 'error_response>>)
+    =
+    let implementation_kind =
+      let bin_init_writer =
+        Initial_message.bin_writer_t
+          t.bin_initial_response.writer
+          t.bin_error_response.writer
+
+      let impl (c : 'connection_state) (query : 'query) =
+        async {
+          match! f c query with
+          | Error err -> return (Error(make_initial_message (Error err)))
+          | Ok (initial, pipe) -> return (Ok(make_initial_message (Ok initial), pipe))
+        }
+
+      Implementation.Kind.Streaming_rpc
+        { bin_query = t.bin_query
+          bin_init_writer = bin_init_writer
+          bin_update = t.bin_update_response
+          impl = impl }
+
+    Implementation.create implementation_kind t.description
 
   let abort t conn id =
     let query : _ Query_v1.t =
@@ -251,6 +288,8 @@ module Pipe_rpc =
   type ('query, 'response, 'error) t =
     | T of Streaming_rpc.t<'query, unit, 'response, 'error>
 
+  let description (T t) = Streaming_rpc.description t
+
   let create description bin_query bin_response bin_error =
     Streaming_rpc.create
       description
@@ -259,6 +298,19 @@ module Pipe_rpc =
       bin_response
       bin_error
     |> T
+
+  let implement
+    (T t : t<'query, 'response, 'error>)
+    (f : 'connection_state -> 'query -> Async<Result<'response Pipe.Reader.t, 'error>>)
+    =
+    let f c query =
+      async {
+        let! response = f c query
+
+        return (Result.map (fun update_pipe -> (), update_pipe) response)
+      }
+
+    Streaming_rpc.implement t f
 
   let dispatch_iter (T t) conn query initial_handler update_handler =
     Streaming_rpc.dispatch_iter t conn query initial_handler (fun () -> update_handler)

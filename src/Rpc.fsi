@@ -54,6 +54,11 @@ module Pipe_rpc =
     bin_error : 'error Bin_prot.Type_class.t ->
       t<'query, 'response, 'error>
 
+  val implement :
+    t<'query, 'response, 'error> ->
+    ('connection_state -> 'query -> Async<Result<'response Pipe.Reader.t, 'error>>) ->
+      'connection_state Implementation.t
+
   val dispatch_iter :
     t<'query, 'response, 'error> ->
     Connection.t ->
@@ -61,3 +66,5 @@ module Pipe_rpc =
     initial_handler : (Result<Result<unit, 'error>, Rpc_error.t> -> unit) ->
     update_handler : ('response Pipe_message.t -> unit) ->
       unit Or_error.t
+
+  val description : t<_, _, _> -> Rpc_description.t

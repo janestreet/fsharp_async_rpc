@@ -12,14 +12,24 @@ module Kind =
         bin_response : 'response Bin_prot.Type_class.t
         impl : 'connection_state -> 'query -> 'response }
 
-  type t<'connection_state, 'query, 'response, 'update> =
+  module Streaming_rpc =
+    type t<'connection_state, 'query, 'init, 'update> =
+      { bin_query : 'query Bin_prot.Type_class.t
+        bin_init_writer : 'init Bin_prot.Type_class.writer
+        bin_update : 'update Bin_prot.Type_class.t
+        impl : 'connection_state
+          -> 'query
+          -> Async<Result<('init * 'update Pipe.Reader.t), 'init>> }
+
+  type t<'connection_state, 'query, 'response, 'init, 'update> =
     | Rpc of Rpc.t<'connection_state, 'query, 'response>
+    | Streaming_rpc of Streaming_rpc.t<'connection_state, 'query, 'init, 'update>
 
 // When adding an [Async_rpc.Implementation] in F# users should note that function may be
 // run in the thread pool, depending on the concurrency setting on the server; in this
 // case, thread-safety must be considered.
 val create :
-  Kind.t<'connection_state, 'query, 'response, 'update> ->
+  Kind.t<'connection_state, 'query, 'response, 'init, 'update> ->
   Rpc_description.t ->
     'connection_state t
 

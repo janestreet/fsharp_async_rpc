@@ -26,6 +26,22 @@ let int_rpc =
     Type_class.bin_int64
     Type_class.bin_int64
 
+let string_pipe_rpc =
+  Pipe_rpc.create
+    { Rpc_description.name = "string-pipe-rpc"
+      Rpc_description.version = 1L }
+    Type_class.bin_string
+    Type_class.bin_string
+    Type_class.bin_string
+
+let int_pipe_rpc =
+  Pipe_rpc.create
+    { Rpc_description.name = "int-pipe-rpc"
+      Rpc_description.version = 5L }
+    Type_class.bin_int64
+    Type_class.bin_int64
+    Type_class.bin_int64
+
 let start_client port connection_callback =
   let client = new TcpClient(ip_address, port)
   let stream = client.GetStream() :> System.IO.Stream
@@ -68,6 +84,42 @@ let start_client_and_dispatch_rpc port rpc (queries : 'query list) =
 
   on_dispatch, on_response_tasks
 
+let start_client_and_dispatch_pipe_rpc
+  port
+  (pipe_rpc : Pipe_rpc.t<'query, 'response, 'error>)
+  queries
+  =
+  let on_initial, pipes =
+    List.map (fun (_ : 'query) -> new TaskCompletionSource<_>(), Pipe.create ()) queries
+    |> List.unzip
+
+  let connection_callback connection (_ : TcpClient) =
+    List.zip3 queries on_initial pipes
+    |> List.map (fun (query, on_initial, ((_ : 'response Pipe.Reader.t), writer)) ->
+      Pipe_rpc.dispatch_iter
+        pipe_rpc
+        connection
+        query
+        on_initial.SetResult
+        (fun pipe_message ->
+          match pipe_message with
+          | Pipe_message.Update update -> Pipe.write_without_pushback writer update
+          | Pipe_message.Closed_by_remote_side
+          | Pipe_message.Closed_from_error (_ : Error.t) -> Pipe.close writer))
+    |> Result.all_unit
+
+  let on_dispatch = start_client port connection_callback
+
+  let on_initial_tasks =
+    List.map
+      (fun (on_initial : TaskCompletionSource<Rpc_result.t<Result<unit, 'error>>>) ->
+        on_initial.Task)
+      on_initial
+
+  let readers = List.map fst pipes
+
+  on_dispatch, on_initial_tasks, readers
+
 let setup_server implementations_list initial_connection_state concurrency =
   let time_source = new Time_source.Wall_clock.t ()
   let local_address = IPAddress.Parse ip_address
@@ -82,11 +134,8 @@ let setup_server implementations_list initial_connection_state concurrency =
 
 let ignore_connection_state (_ : Socket) (_ : Connection.t) = ()
 
-let wait_for_all_responses_ok_exn on_response_tasks =
-  List.map
-    (fun (on_response_task : Task<Result<'response, Rpc_error.t>>) ->
-      on_response_task.Result)
-    on_response_tasks
+let wait_for_all_tasks_ok_exn tasks =
+  List.map (fun (task : Task<_>) -> task.Result) tasks
   |> Result.all
   |> Result.ok_exn
 
@@ -129,18 +178,30 @@ let ``Hanging implementations do not cause the client thread to block`` () =
 
   hang_implementations <- false
 
-  let responses = wait_for_all_responses_ok_exn on_responses
+  let responses = wait_for_all_tasks_ok_exn on_responses
   Assert.AreEqual(queries, responses)
 
 [<Test>]
 [<Category("Server")>]
 let ``Multiple clients making different rpc calls`` () =
-  let string_implementation = (fun () query -> "Received " + query)
-  let int_implementation = (fun () query -> query + 1L)
+  let string_implementation () query = "Received " + query
+  let int_implementation () query = query + 1L
+
+  let string_pipe_implementation () query =
+    let reader, writer = Pipe.create ()
+
+    async {
+      let s = $"Received %s{query}"
+      do! Pipe.write_async writer s
+
+      Pipe.close writer
+      return (Ok reader)
+    }
 
   let implementation_list =
     [ Rpc.implement string_rpc string_implementation
-      Rpc.implement int_rpc int_implementation ]
+      Rpc.implement int_rpc int_implementation
+      Pipe_rpc.implement string_pipe_rpc string_pipe_implementation ]
 
   let server =
     setup_server
@@ -156,14 +217,27 @@ let ``Multiple clients making different rpc calls`` () =
   let (on_dispatch_client_2, on_responses_client_2) =
     start_client_and_dispatch_rpc port int_rpc [ 0L; 1L; 2L ]
 
+  let (on_dispatch_client_3, on_initial_client_3, updates_client_3) =
+    start_client_and_dispatch_pipe_rpc port string_pipe_rpc [ "pipe_rpc query" ]
+
   Result.ok_exn on_dispatch_client_1.Result
   Result.ok_exn on_dispatch_client_2.Result
 
-  let responses_client_1 = wait_for_all_responses_ok_exn on_responses_client_1
-  let responses_client_2 = wait_for_all_responses_ok_exn on_responses_client_2
+  Result.ok_exn on_dispatch_client_3.Result
+
+  wait_for_all_tasks_ok_exn on_initial_client_3
+  |> Result.all_unit
+  |> Result.ok_exn
+
+  let responses_client_1 = wait_for_all_tasks_ok_exn on_responses_client_1
+  let responses_client_2 = wait_for_all_tasks_ok_exn on_responses_client_2
+
+  let responses_client_3 =
+    List.map (fun pipe -> (Pipe.to_list pipe).Result) updates_client_3
 
   Assert.AreEqual(responses_client_1, [ "Received query" ])
   Assert.AreEqual(responses_client_2, [ 1L; 2L; 3L ])
+  Assert.AreEqual(responses_client_3, [ [ "Received pipe_rpc query" ] ])
 
 module Connection_state =
   type t = { mutable total : int64 }
@@ -191,7 +265,7 @@ let ``Custom connection state`` () =
 
     start_client_and_dispatch_rpc port int_rpc queries
     |> snd
-    |> wait_for_all_responses_ok_exn
+    |> wait_for_all_tasks_ok_exn
 
   let (expected_in_order_responses, _ : int64) =
     List.mapFold
@@ -260,6 +334,84 @@ let ``stop_accepting_new_connections stops accepting connections without closing
   client.Close()
 
   assert_connection_refused port
+
+[<Test>]
+[<Category("Server")>]
+let ``Pipe_rpc server with multiple clients`` () =
+  let make_string_responses query =
+    List.map (fun c -> $"Received: %s{query}; Letter: %c{c}") [ 'a' .. 'd' ]
+
+  let make_int_responses query = List.map (fun x -> query + x) [ 0L .. 5L ]
+
+  let string_pipe_implementation () query =
+    async {
+      let reader, writer = Pipe.create ()
+
+      do!
+        make_string_responses query
+        |> List.map (fun response -> Pipe.write_async writer response)
+        |> Async.Sequential
+        |> Async.Ignore
+
+      Pipe.close writer
+      return (Ok reader)
+    }
+
+  let int_pipe_implementation () query =
+    async {
+      let reader, writer = Pipe.create ()
+
+      do!
+        make_int_responses query
+        |> List.map (fun response -> Pipe.write_async writer response)
+        |> Async.Sequential
+        |> Async.Ignore
+
+      Pipe.close writer
+      return (Ok reader)
+    }
+
+  let implementation_list : unit Implementation.t list =
+    [ Pipe_rpc.implement string_pipe_rpc string_pipe_implementation
+      Pipe_rpc.implement int_pipe_rpc int_pipe_implementation ]
+
+  let server =
+    setup_server
+      implementation_list
+      ignore_connection_state
+      Connection.Concurrency.Parallel
+
+  let port = Server.port server
+
+  let start_client_and_assert_results pipe_rpc queries get_expected =
+    async {
+      let on_dispatch, on_initial_tasks, updates =
+        start_client_and_dispatch_pipe_rpc port pipe_rpc queries
+
+      Result.ok_exn on_dispatch.Result
+
+      wait_for_all_tasks_ok_exn on_initial_tasks
+      |> Result.all_unit
+      |> Result.ok_exn
+
+      let responses = List.map (fun pipe -> (Pipe.to_list pipe).Result) updates
+
+      List.zip queries responses
+      |> List.iter (fun (query, response) ->
+        let expected = get_expected query
+        Assert.AreEqual(expected, response))
+
+      List.iter
+        (fun reader ->
+          (Pipe.closed reader).Wait()
+          Assert.AreEqual(Pipe.Read_now_result.Eof, (Pipe.read_now reader)))
+        updates
+    }
+
+  [ start_client_and_assert_results string_pipe_rpc [ "test-query" ] make_string_responses
+    start_client_and_assert_results int_pipe_rpc [ 1_000L; 5_000L ] make_int_responses ]
+  |> Async.Parallel
+  |> Async.Ignore
 
 [<Test>]
 [<Category("Server")>]
